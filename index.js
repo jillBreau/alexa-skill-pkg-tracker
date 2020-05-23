@@ -9,7 +9,7 @@ const LaunchRequestHandler = {
         return handlerInput.requestEnvelope.request.type === 'LaunchRequest';
     },
     handle(handlerInput) {
-        const speechText = 'Welcome to Package Tracker, you can say Add a Package, or Track my Package!';
+        const speechText = 'Welcome to Package Tracker, you can say Add a Package, or List my Packages!';
         
         return handlerInput.responseBuilder
             .speak(speechText)
