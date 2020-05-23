@@ -1,0 +1,27 @@
+{
+  "name": "alexa-pkg-tracker",
+  "version": "1.0.0",
+  "description": "An Alexa skill to track packages!",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "zipLambda": "npm-pack-zip"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jillBreau/alexa-skill-pkg-tracker.git"
+  },
+  "author": "Jill Breau",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jillBreau/alexa-skill-pkg-tracker/issues"
+  },
+  "homepage": "https://github.com/jillBreau/alexa-skill-pkg-tracker#readme",
+  "dependencies": {
+    "ask-sdk": "^2.8.0",
+    "ask-sdk-s3-persistence-adapter": "^2.8.0"
+  },
+  "devDependencies": {
+    "npm-pack-zip": "^1.2.7"
+  }
+}
