@@ -42,7 +42,7 @@ const HelpIntentHandler = {
             && handlerInput.requestEnvelope.request.intent.name === 'AMAZON.HelpIntent';
     },
     handle(handlerInput) {
-        const speechText = 'You can say Add a Package to give me information about a new package you would like to track, or you can say Track my Package to get tracking information on a package I already know about.';
+        const speechText = 'You can say Add a Package to give me information about a new package you would like to track, or you can say List my Packages to hear the packages I already know about.';
         
         return handlerInput.responseBuilder
             .speak(speechText)
