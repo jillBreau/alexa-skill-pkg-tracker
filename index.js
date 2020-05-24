@@ -9,7 +9,7 @@ const LaunchRequestHandler = {
         return handlerInput.requestEnvelope.request.type === 'LaunchRequest';
     },
     handle(handlerInput) {
-        const speechText = 'Welcome to Package Tracker, you can say Add a Package, or List my Packages!';
+        const speechText = 'Welcome to Package Tracker, you can say Add a Package, Remove a Package, or List my Packages!';
         
         return handlerInput.responseBuilder
             .speak(speechText)
@@ -26,7 +26,7 @@ const HelloWorldIntentHandler = {
             && handlerInput.requestEnvelope.request.intent.name === 'HelloWorldIntent';
     },
     handle(handlerInput) {
-        const speechText = 'Hello World!';
+        const speechText = 'Hello there! Say Open Package Tracker to get started!';
         
         return handlerInput.responseBuilder
             .speak(speechText)
@@ -42,7 +42,7 @@ const HelpIntentHandler = {
             && handlerInput.requestEnvelope.request.intent.name === 'AMAZON.HelpIntent';
     },
     handle(handlerInput) {
-        const speechText = 'You can say Add a Package to give me information about a new package you would like to track, or you can say List my Packages to hear the packages I already know about.';
+        const speechText = 'You can say Add a Package to give me information about a new package you would like to track, you can say Remove a Package to make me forget a package and its information, or you can say List my Packages to hear the packages I already know about.';
         
         return handlerInput.responseBuilder
             .speak(speechText)
@@ -104,6 +104,31 @@ const InProgressAddPackageIntentHandler = {
     },
     handle(handlerInput) {
 
+        if (handlerInput.requestEnvelope.request.intent.slots.packageName.value) {
+
+            const attributesManager = handlerInput.attributesManager;
+            let sessionAttributes = attributesManager.getSessionAttributes() || [];
+            sessionAttributes = isEmptyObject(sessionAttributes) ? [] : sessionAttributes;
+
+            for (const package of sessionAttributes) {
+                let existingPackageName = package.hasOwnProperty('packageName') ? package.packageName : "";
+                
+                if (handlerInput.requestEnvelope.request.intent.slots.packageName.value == existingPackageName) {
+
+                    let speak = `You already have a package named ${existingPackageName}. Please provide a new, unique package name.`;
+                    let reprompt = `Please provide a name other than ${existingPackageName} to identify this package.`;
+
+                    return handlerInput.responseBuilder
+                        .speak(speak)
+                        .reprompt(reprompt)
+                        .addElicitSlotDirective('packageName')
+                        .getResponse();
+
+                }
+            }
+
+        }
+
         return handlerInput.responseBuilder
             .addDelegateDirective()
             .getResponse();
@@ -157,14 +182,19 @@ const CompletedAddPackageIntentHandler = {
         const shippingCompany = handlerInput.requestEnvelope.request.intent.slots.shippingCompany.value;
         const trackingNumber = trackingNumberCharsGiven.toUpperCase();
         
-        const attributesManager = handlerInput.attributesManager;
-        const packageAttributes = {
+        const newPackageAttributes = {
             "packageName" : packageName,
             "shippingCompany" : shippingCompany,
             "trackingNumber" : trackingNumber
         };
+
+        const attributesManager = handlerInput.attributesManager;
+        let sessionAttributes = attributesManager.getSessionAttributes() || [];
+        sessionAttributes = isEmptyObject(sessionAttributes) ? [] : sessionAttributes;
+
+        sessionAttributes.push(newPackageAttributes);
         
-        attributesManager.setPersistentAttributes(packageAttributes);
+        attributesManager.setPersistentAttributes(sessionAttributes);
         await attributesManager.savePersistentAttributes();
 
         handlerInput.requestEnvelope.request.intent.slots.packageName.value = null;
@@ -173,7 +203,7 @@ const CompletedAddPackageIntentHandler = {
         handlerInput.requestEnvelope.request.intent.slots.trackingNumberChar.value = null;
         trackingNumberCharsGiven = "";
 
-        const speakOutput = `It looks like your package called ${packageName} is coming from the shipping company ${shippingCompany} with the tracking number ${trackingNumber}`;
+        const speakOutput = `I now know that you have a package called ${packageName} coming from the shipping company ${shippingCompany} with the tracking number ${trackingNumber}.`;
         
         return handlerInput.responseBuilder
             .speak(speakOutput)
@@ -190,15 +220,110 @@ const ListPackagesIntentHandler = {
     handle(handlerInput) {
 
         const attributesManager = handlerInput.attributesManager;
-        const sessionAttributes = attributesManager.getSessionAttributes() || {};
+        let sessionAttributes = attributesManager.getSessionAttributes() || [];
 
-        const packageName = sessionAttributes.hasOwnProperty('packageName') ? sessionAttributes.packageName : "";
-        const shippingCompany = sessionAttributes.hasOwnProperty('shippingCompany') ? sessionAttributes.shippingCompany : "";
-        const trackingNumber = sessionAttributes.hasOwnProperty('trackingNumber') ? sessionAttributes.trackingNumber : "";
+        sessionAttributes = isEmptyObject(sessionAttributes) ? [] : sessionAttributes;
 
-        let speakOutput = `Your current package is called ${packageName}. It is being shipped by ${shippingCompany} with the tracking number ${trackingNumber}.`;
-        if (!packageName || !shippingCompany || !trackingNumber) {
-            speakOutput = "You have no current packages"
+        let packageNames = [];
+
+        for (const package of sessionAttributes) {
+            let packageName = package.hasOwnProperty('packageName') ? package.packageName : "";
+            packageNames.push(packageName);
+        }
+
+        let packageNamesString = packageNames.join(", ").replace(/,(?=[^,]*$)/, ' and');
+
+        let speakOutput = `Your current packages are called ${packageNamesString}.`
+        if (packageNames.length === 1) {
+            speakOutput = `Your current package is called ${packageNamesString}.`
+        } else if (packageNames.length === 0) {
+            speakOutput = "You have no current packages."
+        }
+
+        return handlerInput.responseBuilder
+            .speak(speakOutput)
+            .getResponse();
+    }
+};
+
+
+const InProgressRemovePackageIntentHandler = {
+    canHandle(handlerInput) {
+        return handlerInput.requestEnvelope.request.type === "IntentRequest"
+            && handlerInput.requestEnvelope.request.intent.name === "RemovePackageIntent"
+            && handlerInput.requestEnvelope.request.dialogState !== 'COMPLETED';
+    },
+    handle(handlerInput) {
+
+        const removePackageName = handlerInput.requestEnvelope.request.intent.slots.removePackageName.value;
+
+        if (removePackageName) {
+
+            const attributesManager = handlerInput.attributesManager;
+            let sessionAttributes = attributesManager.getSessionAttributes() || [];
+            sessionAttributes = isEmptyObject(sessionAttributes) ? [] : sessionAttributes;
+
+            let thisPackageExists = false;
+            let existingPackageNames = [];
+
+            for (const package of sessionAttributes) {
+                let existingPackageName = package.hasOwnProperty('packageName') ? package.packageName : "";
+                existingPackageNames.push(existingPackageName);
+
+                if (removePackageName == existingPackageName) {
+                    thisPackageExists = true;
+                }
+            }
+
+            if (!thisPackageExists) {
+
+                let packageNamesString = existingPackageNames.join(", ").replace(/,(?=[^,]*$)/, ' or');
+
+                let speak = `You do not have a package named ${removePackageName}. Please provide the name of a package that you have, in order to remove it.`;
+                let reprompt = `Please provide the name of the package you would like to remove. Your options are ${packageNamesString}.`;
+
+                return handlerInput.responseBuilder
+                    .speak(speak)
+                    .reprompt(reprompt)
+                    .addElicitSlotDirective('removePackageName')
+                    .getResponse();
+            }
+        }
+
+        return handlerInput.responseBuilder
+            .addDelegateDirective()
+            .getResponse();
+    }
+};
+
+
+const CompletedRemovePackageIntentHandler = {
+    canHandle(handlerInput) {
+        return handlerInput.requestEnvelope.request.type === "IntentRequest"
+            && handlerInput.requestEnvelope.request.intent.name === "RemovePackageIntent"
+            && handlerInput.requestEnvelope.request.dialogState === 'COMPLETED';
+    },
+    async handle(handlerInput) {
+
+        const removePackageName = handlerInput.requestEnvelope.request.intent.slots.removePackageName.value
+
+        const attributesManager = handlerInput.attributesManager;
+        let sessionAttributes = attributesManager.getSessionAttributes() || [];
+        sessionAttributes = isEmptyObject(sessionAttributes) ? [] : sessionAttributes;
+
+        var remainingSessionAttributes = sessionAttributes
+            .filter(function(value, index, arr) { 
+            return value.packageName !== removePackageName;
+        });
+
+        attributesManager.setPersistentAttributes(remainingSessionAttributes);
+        await attributesManager.savePersistentAttributes();
+
+        handlerInput.requestEnvelope.request.intent.slots.removePackageName.value = null;
+
+        let speakOutput = `The package ${removePackageName} was removed.`
+        if (remainingSessionAttributes.length == sessionAttributes.length) {
+            speakOutput = `There was no package called ${removePackageName} to remove.`
         }
 
         return handlerInput.responseBuilder
@@ -210,18 +335,26 @@ const ListPackagesIntentHandler = {
 
 const LoadPackageInterceptor = {
     async process(handlerInput) {
+
         const attributesManager = handlerInput.attributesManager;
-        const sessionAttributes = await attributesManager.getPersistentAttributes() || {};
+        let sessionAttributes = await attributesManager.getPersistentAttributes() || [];
+        sessionAttributes = isEmptyObject(sessionAttributes) ? [] : sessionAttributes;
 
-        const packageName = sessionAttributes.hasOwnProperty('packageName') ? sessionAttributes.packageName : "";
-        const shippingCompany = sessionAttributes.hasOwnProperty('shippingCompany') ? sessionAttributes.shippingCompany : "";
-        const trackingNumber = sessionAttributes.hasOwnProperty('trackingNumber') ? sessionAttributes.trackingNumber : "";
-
-        if (packageName && shippingCompany && trackingNumber) {
+        if (sessionAttributes) {
             attributesManager.setSessionAttributes(sessionAttributes);
         }
     }
 };
+
+
+function isEmptyObject(param) {
+    for(var property in param) {
+        if(param.hasOwnProperty(property)) {
+            return false;
+        }
+    }
+    return JSON.stringify(param) === JSON.stringify({});
+}
 
 
 /**
@@ -241,7 +374,9 @@ exports.handler = Alexa.SkillBuilders.custom()
         InProgressAddPackageIntentHandler,
         RequiredSlotsFilledAddPackageIntentHandler,
         CompletedAddPackageIntentHandler,
-        ListPackagesIntentHandler
+        ListPackagesIntentHandler,
+        InProgressRemovePackageIntentHandler,
+        CompletedRemovePackageIntentHandler
     )
     .addRequestInterceptors(LoadPackageInterceptor)
     .addErrorHandlers(ErrorHandler)
