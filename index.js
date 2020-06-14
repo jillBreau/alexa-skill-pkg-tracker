@@ -1,6 +1,8 @@
 const Alexa = require('ask-sdk-core');
 const persistenceAdapter = require('ask-sdk-s3-persistence-adapter');
-
+// var XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
+// import * as XMLHttpRequest from 'xmlhttprequest';
+var XMLHttpRequest = require('xhr2');
 
 let trackingNumberCharsGiven = "";
 
@@ -9,7 +11,7 @@ const LaunchRequestHandler = {
         return handlerInput.requestEnvelope.request.type === 'LaunchRequest';
     },
     handle(handlerInput) {
-        const speechText = 'Welcome to Package Tracker, you can say Add a Package, Remove a Package, or List my Packages!';
+        const speechText = 'Welcome to Package Tracker, you can say Add a Package, Track a Package, Remove a Package, or List my Packages!';
         
         return handlerInput.responseBuilder
             .speak(speechText)
@@ -42,7 +44,7 @@ const HelpIntentHandler = {
             && handlerInput.requestEnvelope.request.intent.name === 'AMAZON.HelpIntent';
     },
     handle(handlerInput) {
-        const speechText = 'You can say Add a Package to give me information about a new package you would like to track, you can say Remove a Package to make me forget a package and its information, or you can say List my Packages to hear the packages I already know about.';
+        const speechText = 'You can say Add a Package to give me information about a new package, you can say Track a Package to get tracking info on a package you\'ve added, you can say Remove a Package to make me forget a package and its information, or you can say List my Packages to hear the packages you\'ve added.';
         
         return handlerInput.responseBuilder
             .speak(speechText)
@@ -203,7 +205,7 @@ const CompletedAddPackageIntentHandler = {
         handlerInput.requestEnvelope.request.intent.slots.trackingNumberChar.value = null;
         trackingNumberCharsGiven = "";
 
-        const speakOutput = `I now know that you have a package called ${packageName} coming from the shipping company ${shippingCompany} with the tracking number ${trackingNumber}.`;
+        const speakOutput = `I now know that you have a package called ${packageName} coming from the shipping company ${shippingCompany} with the tracking number ${trackingNumber}. You can say track a package to get tracking information on your packages.`;
         
         return handlerInput.responseBuilder
             .speak(speakOutput)
@@ -263,30 +265,40 @@ const InProgressRemovePackageIntentHandler = {
             let sessionAttributes = attributesManager.getSessionAttributes() || [];
             sessionAttributes = isEmptyObject(sessionAttributes) ? [] : sessionAttributes;
 
-            let thisPackageExists = false;
-            let existingPackageNames = [];
+            if (sessionAttributes.length === 0) {
 
-            for (const package of sessionAttributes) {
-                let existingPackageName = package.hasOwnProperty('packageName') ? package.packageName : "";
-                existingPackageNames.push(existingPackageName);
-
-                if (removePackageName == existingPackageName) {
-                    thisPackageExists = true;
-                }
-            }
-
-            if (!thisPackageExists) {
-
-                let packageNamesString = existingPackageNames.join(", ").replace(/,(?=[^,]*$)/, ' or');
-
-                let speak = `You do not have a package named ${removePackageName}. Please provide the name of a package that you have, in order to remove it.`;
-                let reprompt = `Please provide the name of the package you would like to remove. Your options are ${packageNamesString}.`;
+                let speak = `You do not have a package named ${removePackageName}. You have no packages. You can say Add a Package to add one.`;
 
                 return handlerInput.responseBuilder
-                    .speak(speak)
-                    .reprompt(reprompt)
-                    .addElicitSlotDirective('removePackageName')
-                    .getResponse();
+                        .speak(speak)
+                        .addElicitSlotDirective('removePackageName')
+                        .getResponse();
+
+            } else {
+
+                let thisPackageExists = false;
+                let existingPackageNames = [];
+
+                for (const package of sessionAttributes) {
+                    let existingPackageName = package.hasOwnProperty('packageName') ? package.packageName : "";
+                    existingPackageNames.push(existingPackageName);
+
+                    if (removePackageName == existingPackageName) {
+                        thisPackageExists = true;
+                    }
+                }
+
+                if (!thisPackageExists) {
+
+                    let speak = `You do not have a package named ${removePackageName}. Please provide the name of a package that you have, in order to remove it.`;
+                    let reprompt = `Please provide the name of the package you would like to remove, or say List my Packages to hear to packages you have.`;
+
+                    return handlerInput.responseBuilder
+                        .speak(speak)
+                        .reprompt(reprompt)
+                        .addElicitSlotDirective('removePackageName')
+                        .getResponse();
+                }
             }
         }
 
@@ -329,6 +341,125 @@ const CompletedRemovePackageIntentHandler = {
         return handlerInput.responseBuilder
             .speak(speakOutput)
             .getResponse();
+    }
+};
+
+
+const InProgressTrackPackageIntentHandler = {
+    canHandle(handlerInput) {
+        return handlerInput.requestEnvelope.request.type === "IntentRequest"
+            && handlerInput.requestEnvelope.request.intent.name === "TrackPackageIntent"
+            && handlerInput.requestEnvelope.request.dialogState !== 'COMPLETED';
+    },
+    handle(handlerInput) {
+
+        const trackPackageName = handlerInput.requestEnvelope.request.intent.slots.trackPackageName.value;
+
+        if (trackPackageName) {
+
+            const attributesManager = handlerInput.attributesManager;
+            let sessionAttributes = attributesManager.getSessionAttributes() || [];
+            sessionAttributes = isEmptyObject(sessionAttributes) ? [] : sessionAttributes;
+
+            if (sessionAttributes.length === 0) {
+
+                let speak = `You do not have a package named ${trackPackageName}. You have no packages. You can say Add a Package to add this one.`;
+
+                return handlerInput.responseBuilder
+                        .speak(speak)
+                        .addElicitSlotDirective('trackPackageName')
+                        .getResponse();
+
+            } else {
+
+                let thisPackageExists = false;
+                let existingPackageNames = [];
+
+                for (const package of sessionAttributes) {
+                    let existingPackageName = package.hasOwnProperty('packageName') ? package.packageName : "";
+                    existingPackageNames.push(existingPackageName);
+
+                    if (trackPackageName == existingPackageName) {
+                        thisPackageExists = true;
+                    }
+                }
+
+                if (!thisPackageExists) {
+
+                    let speak = `You do not have a package named ${trackPackageName}. Please provide the name of a package that you have, in order to track it.`;
+                    let reprompt = `Please provide the name of the package you would like to track, or say List my Packages to hear to packages you have.`;
+
+                    return handlerInput.responseBuilder
+                        .speak(speak)
+                        .reprompt(reprompt)
+                        .addElicitSlotDirective('trackPackageName')
+                        .getResponse();
+                }
+            }
+        }
+
+        return handlerInput.responseBuilder
+            .addDelegateDirective()
+            .getResponse();
+    }
+};
+
+
+const CompletedTrackPackageIntentHandler = {
+    canHandle(handlerInput) {
+        return handlerInput.requestEnvelope.request.type === "IntentRequest"
+            && handlerInput.requestEnvelope.request.intent.name === "TrackPackageIntent"
+            && handlerInput.requestEnvelope.request.dialogState === 'COMPLETED';
+    },
+    handle(handlerInput) {
+
+        const trackPackageName = handlerInput.requestEnvelope.request.intent.slots.trackPackageName.value
+
+        const attributesManager = handlerInput.attributesManager;
+        let sessionAttributes = attributesManager.getSessionAttributes() || [];
+        sessionAttributes = isEmptyObject(sessionAttributes) ? [] : sessionAttributes;
+
+        for (const package of sessionAttributes) {
+            let packageName = package.hasOwnProperty('packageName') ? package.packageName : "";
+            let shippingCompany = package.hasOwnProperty('shippingCompany') ? package.shippingCompany : "";
+            let trackingNumber = package.hasOwnProperty('trackingNumber') ? package.trackingNumber : "";
+
+            if (trackPackageName == packageName) {
+
+                handlerInput.requestEnvelope.request.intent.slots.trackPackageName.value = null;
+
+                //response.shipments.status.timestamp
+                //response.shipments.status.location.address.addressLocality
+                //response.shipments.status.status
+
+                const Http = new XMLHttpRequest();
+                const url='https://jsonplaceholder.typicode.com/posts';
+                Http.open("GET", url);
+                Http.send();
+
+                // Http.onreadystatechange = (e) => {
+                // console.log(Http.responseText)
+                // }
+
+                Http.onreadystatechange=function(){
+                    if (this.readyState == 4 && this.status == 200) {
+                        console.log(Http.responseText)
+                    }
+                }
+
+                let speakOutput = `The package ${packageName} is coming from ${shippingCompany} with the tracking number ${trackingNumber}.`
+
+                return handlerInput.responseBuilder
+                    .speak(speakOutput)
+                    .getResponse();
+            }
+        }
+
+        let speak = `You do not have a package named ${trackPackageName}. Please provide the name of a package that you have, in order to track it.`;
+
+        return handlerInput.responseBuilder
+                    .speak(speak)
+                    .getResponse();
     }
 };
 
@@ -376,7 +507,9 @@ exports.handler = Alexa.SkillBuilders.custom()
         CompletedAddPackageIntentHandler,
         ListPackagesIntentHandler,
         InProgressRemovePackageIntentHandler,
-        CompletedRemovePackageIntentHandler
+        CompletedRemovePackageIntentHandler,
+        InProgressTrackPackageIntentHandler,
+        CompletedTrackPackageIntentHandler
     )
     .addRequestInterceptors(LoadPackageInterceptor)
     .addErrorHandlers(ErrorHandler)
